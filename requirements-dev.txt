@@ -1,0 +1,2 @@
+# GATIGA 테스트 실행용 Python 패키지
+pytest>=8,<10
