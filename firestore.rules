@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function member(code) {
+      return signedIn() && exists(/databases/$(database)/documents/rooms/$(code)/members/$(request.auth.uid));
+    }
+    match /rooms/{code} {
+      // 12자리 무작위 초대 코드를 아는 로그인 사용자만 방 정보를 직접 조회할 수 있음.
+      // Firestore 목록 조회는 금지. 초대 코드는 비밀번호가 아니므로 공개 공유에 주의.
+      allow get: if signedIn() && code.matches('[A-HJ-NP-Z2-9]{12}');
+      allow list: if false;
+      allow create: if signedIn() && code.matches('[A-HJ-NP-Z2-9]{12}')
+        && request.resource.data.keys().hasOnly(['name','date','time','place','owner','createdAt'])
+        && request.resource.data.owner == request.auth.uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 50
+        && request.resource.data.place is string && request.resource.data.place.size() <= 100
+        && request.resource.data.date is string && request.resource.data.time is string;
+      allow update, delete: if false;
+      match /members/{uid} {
+        allow get: if signedIn() && request.auth.uid == uid;
+        allow list: if false;
+        allow create: if signedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['joinedAt'])
+          && exists(/databases/$(database)/documents/rooms/$(code));
+        allow delete: if signedIn() && request.auth.uid == uid;
+        allow update: if false;
+      }
+      match /messages/{messageId} {
+        allow get, list: if member(code);
+        allow create: if member(code)
+          && request.resource.data.keys().hasOnly(['sender','name','text','at'])
+          && request.resource.data.sender == request.auth.uid
+          && request.resource.data.name == '친구'
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.at == request.time;
+        allow update, delete: if false;
+      }
+    }
+  }
+}

@@ -1,6 +1,8 @@
 /* 같이가 2단계: 1단계 저장 데이터 유지 + 로컬 코드 참여 + 데모 지도/ETA */
 (() => {
   'use strict';
+  const F=globalThis.GachigaFirebase;
+  let chatUnsubscribe=null;let remoteMessages={};
   const KEY = 'gachiga.rooms.v1'; // 1단계의 기존 저장 키를 그대로 사용합니다.
   const DEMO_ID = 'gachiga-demo-room';
   const LEFT_KEY = globalThis.GachigaRoomLeave.LEFT_KEY; // 나간 데모 약속방을 이 브라우저에서 숨깁니다.
@@ -61,7 +63,7 @@
     return `<button type="button" class="room-card" data-room="${escapeHtml(room.id)}"><span class="tag">${room.demo?'시연 전용 · 예시 참여자':'우리의 약속 ✨'}</span><h3>${escapeHtml(room.name)}</h3><p>📅 ${formatDate(room.date,room.time)}</p><p>📍 ${escapeHtml(room.place)}</p><span class="card-arrow">상세 보기 →</span></button>`;
   }
   function joinPanel() {
-    return `<section class="join-panel"><div class="join-title"><span>💌</span><div><h2>초대 코드로 참여하기</h2><p>친구에게 받은 6자리 코드를 입력해요.</p></div></div><form id="join-form" class="join-form"><label class="sr-only" for="join-code">약속방 초대 코드</label><input id="join-code" name="code" maxlength="6" minlength="6" autocomplete="off" placeholder="예: ABC123" required><button type="submit" class="button primary">참여하기</button></form><p class="hint">현재는 같은 브라우저의 약속방 또는 데모방 DEMO24만 열 수 있어요. 다른 기기와 실제 참여·채팅 동기화는 지원하지 않아요.</p><p id="join-error" class="error" role="alert" hidden></p></section>`;
+    return `<section class="join-panel"><div class="join-title"><span>💌</span><div><h2>초대 코드로 참여하기</h2><p>친구에게 받은 초대 코드를 입력해요.</p></div></div><form id="join-form" class="join-form"><label class="sr-only" for="join-code">약속방 초대 코드</label><input id="join-code" name="code" maxlength="12" minlength="6" autocomplete="off" placeholder="예: ABC123" required><button type="submit" class="button primary">참여하기</button></form><p class="hint">새로 만든 약속방은 Firebase로 친구와 연결돼요. DEMO24는 로컬 시연방이에요.</p><p id="join-error" class="error" role="alert" hidden></p></section>`;
   }
   function renderHome() {
     const latest=[...rooms].reverse().slice(0,2);
@@ -80,7 +82,7 @@
     return `<div class="code-box"><div class="subtle">친구 초대 코드</div><div class="code">${escapeHtml(room.code)}</div><button class="button ghost" data-copy="${escapeHtml(room.code)}">📋 코드 복사하기</button></div>`;
   }
   function renderSuccess(room) {
-    app.innerHTML=`<section class="success-burst"><div class="emoji">🎉</div><h1>약속방 완성!</h1><p>친구들에게 초대 코드를 알려주세요.</p></section><section class="detail-card"><span class="tag">함께 만나는 날</span><h2>${escapeHtml(room.name)}</h2><div class="info-row"><span>📅 날짜와 시간</span><strong>${formatDate(room.date,room.time)}</strong></div><div class="info-row"><span>📍 약속 장소</span><strong>${escapeHtml(room.place)}</strong></div>${codeBox(room)}<p class="hint">초대 코드는 같은 브라우저에서만 확인할 수 있어요. 실제 기기 간 초대는 추후 서버 연동이 필요해요.</p></section><div class="actions"><button class="button primary full" data-open-detail="${escapeHtml(room.id)}">약속방 상세 보기 →</button><button class="button secondary full" data-go="rooms">내 약속방 보기</button></div>`;
+    app.innerHTML=`<section class="success-burst"><div class="emoji">🎉</div><h1>약속방 완성!</h1><p>친구들에게 초대 코드를 알려주세요.</p></section><section class="detail-card"><span class="tag">함께 만나는 날</span><h2>${escapeHtml(room.name)}</h2><div class="info-row"><span>📅 날짜와 시간</span><strong>${formatDate(room.date,room.time)}</strong></div><div class="info-row"><span>📍 약속 장소</span><strong>${escapeHtml(room.place)}</strong></div>${codeBox(room)}<p class="hint">새 약속방은 다른 기기에서도 같은 초대 코드로 참여할 수 있어요.</p></section><div class="actions"><button class="button primary full" data-open-detail="${escapeHtml(room.id)}">약속방 상세 보기 →</button><button class="button secondary full" data-go="rooms">내 약속방 보기</button></div>`;
   }
   function currentRoom(){return selectedId===DEMO_ID?demoRoom():rooms.find(r=>r.id===selectedId);}
   function privacyFor(room){return {...P.get(localStorage,room.id),active:privacySessions[room.id]===true};}
@@ -111,7 +113,7 @@
     const result=T.summarizePeople(visible,base);
     const current=visible.find(p=>p.id===selectedPerson);
     const lastText=state.ended?'위치 공유가 종료되어 ETA를 표시하지 않아요.':result.allArrived?'🎉 모두 도착 완료':result.everyoneAt?`✨ 모두 도착 예상 <strong>${T.formatDateTime(result.everyoneAt)}</strong>`:'아직 도착 정보를 계산할 수 없어요.';
-    const masked=people.filter(p=>p.id==='me'&&!state.active || state.ended);
+    const masked=people.filter(p=>(p.id==='me'&&!state.active) || state.ended);
     const show=state.ended?[]:people.filter(p=>p.id!=='me'||state.active);
     const summary=state.ended?T.summarizePeople([],base):T.summarizePeople(show,base);
     const invite=room.demo?'<p class="hint">초대 코드는 기본 화면에서 숨겨져 있어요. 시연 코드 DEMO24는 공개된 예시 코드예요.</p>':'<p class="hint">초대 코드는 기본 화면에서 숨겨져 있어요. 필요할 때만 펼쳐 복사해 주세요.</p>';
@@ -157,12 +159,12 @@
   }
   // 채팅은 약속방 ID별로 localStorage에 저장되며, 다른 기기와 동기화되지 않습니다.
   function renderChat(room){
-    const people=peopleFor(room),messages=S.read(localStorage,room.id);
-    app.innerHTML=`<div class="detail-heading"><button class="back-link" data-back-detail>← 약속방으로</button><span class="demo-badge">로컬 데모 채팅</span></div>
-      <div class="page-head"><div class="eyebrow">OUR CHAT</div><h1>💬 ${escapeHtml(room.name)}</h1><p>👥 참여자 ${people.length}명 · 이 브라우저에서만 저장돼요.</p></div>
+    const people=peopleFor(room),messages=room.remote?(remoteMessages[room.id]||[]):S.read(localStorage,room.id);
+    app.innerHTML=`<div class="detail-heading"><button class="back-link" data-back-detail>← 약속방으로</button><span class="demo-badge">${room.remote?'Firebase 실시간 채팅':'로컬 데모 채팅'}</span></div>
+      <div class="page-head"><div class="eyebrow">OUR CHAT</div><h1>💬 ${escapeHtml(room.name)}</h1><p>👥 참여자 ${people.length}명 · ${room.remote?'Firebase 실시간 채팅':'로컬 데모 채팅'}.</p></div>
       <section class="chat-panel"><div class="chat-messages" id="chat-messages" aria-label="약속방 메시지">${messages.length?messages.map(m=>`<div class="chat-row ${m.sender==='me'?'mine':''}">${m.sender==='me'?'':`<span class="chat-avatar">${escapeHtml(m.name.slice(0,1))}</span>`}<div class="chat-content"><small>${escapeHtml(m.sender==='me'?'나':m.name)}</small><div class="chat-bubble">${escapeHtml(m.text)}</div><time>${escapeHtml(chatTime(m.at))}</time></div></div>`).join(''):'<div class="chat-empty">아직 대화가 없어요. 첫 메시지를 보내보세요! 🌱</div>'}</div>
       <form id="chat-form" class="chat-compose"><label class="sr-only" for="chat-input">메시지 입력</label><input id="chat-input" name="message" maxlength="1000" placeholder="메시지를 입력해 주세요" autocomplete="off" required><button class="button primary" type="submit">전송</button></form></section>
-      ${room.demo?'<button type="button" class="button secondary full" data-demo-reply>💬 데모 친구 답장 받아보기</button>':''}<p class="hint">서버 없는 데모 채팅이에요. 다른 휴대폰으로 전송되지 않으며, 데모 친구 답장은 시뮬레이션입니다.</p>`;
+      ${room.demo?'<button type="button" class="button secondary full" data-demo-reply>💬 데모 친구 답장 받아보기</button>':''}<p class="hint">${room.remote?'실제 친구와 메시지가 동기화돼요.':'서버 없는 데모 채팅이에요. 다른 휴대폰으로 전송되지 않으며, 데모 친구 답장은 시뮬레이션입니다.'}</p>`;
     const box=document.querySelector('#chat-messages');box.scrollTop=box.scrollHeight;
   }
   // 데모방에만 예시 친구의 답장을 직접 추가해 채팅 UI를 시험할 수 있습니다.
@@ -177,7 +179,7 @@
   function inviteModal(room){
     const host=document.querySelector('#modal-root');
     const message=V.message(room),url=V.link(room,window.location);
-    host.innerHTML=`<div class="modal-backdrop"><section class="consent-modal invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title"><div class="invite-emoji">💌</div><h2 id="invite-title">친구를 초대해요!</h2><p><strong>${escapeHtml(room.name)}</strong></p><div class="invite-code"><small>초대 코드</small><strong>${escapeHtml(room.code)}</strong></div><p class="hint">카카오톡 등 메신저로 초대 문구를 보낼 수 있어요. 현재는 서버가 없어 다른 기기에서 실제로 같은 방에 참여하거나 채팅할 수는 없어요.</p><div class="invite-actions"><button class="button primary full" data-invite-share>📤 카카오톡·메시지 등으로 공유</button><button class="button secondary full" data-invite-copy>📋 초대 문구 복사</button><button class="button ghost full" data-invite-code>🔑 코드만 복사</button><button class="button ghost full" data-invite-close>닫기</button></div>${url?'<p class="hint">앱이 웹 서버에 게시되어 있다면 초대 링크도 함께 전송돼요. 실제 참여는 별도 서버 구현이 필요해요.</p>':''}</section></div>`;
+    host.innerHTML=`<div class="modal-backdrop"><section class="consent-modal invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title"><div class="invite-emoji">💌</div><h2 id="invite-title">친구를 초대해요!</h2><p><strong>${escapeHtml(room.name)}</strong></p><div class="invite-code"><small>초대 코드</small><strong>${escapeHtml(room.code)}</strong></div><p class="hint">카카오톡 등 메신저로 초대 문구를 보낼 수 있어요. ${room.remote?'초대받은 친구가 같은 방에서 실제 채팅할 수 있어요.':'데모방은 다른 기기와 동기화되지 않아요.'}</p><div class="invite-actions"><button class="button primary full" data-invite-share>📤 카카오톡·메시지 등으로 공유</button><button class="button secondary full" data-invite-copy>📋 초대 문구 복사</button><button class="button ghost full" data-invite-code>🔑 코드만 복사</button><button class="button ghost full" data-invite-close>닫기</button></div>${url?'<p class="hint">초대 링크를 공유할 수 있어요.</p>':''}</section></div>`;
   }
   function closeInvite(){document.querySelector('#modal-root').innerHTML='';}
   async function copyInvite(value){
@@ -192,9 +194,9 @@
     }else{await copyInvite(message+(url?'\n'+url:''));}
   }
   function chatTime(at){const d=new Date(at);return Number.isNaN(d.getTime())?'—':new Intl.DateTimeFormat('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false}).format(d);}
-  function sendChat(form){
+  async function sendChat(form){
     const room=currentRoom();if(!room)return;
-    try{S.send(localStorage,room.id,new FormData(form).get('message'));renderChat(room);document.querySelector('#chat-input').focus();}
+    try{if(room.remote){const input=form.querySelector('#chat-input');const text=input.value;await F.send(room.code,text);input.value='';input.focus();}else{S.send(localStorage,room.id,new FormData(form).get('message'));renderChat(room);document.querySelector('#chat-input').focus();}}
     catch(e){notify(e.message.includes('quota')?'저장 공간이 부족해 메시지를 저장하지 못했어요.':e.message);}
   }
   // 공유 정보는 화이트리스트 기반으로 구성해 코드·좌표·경로가 이미지로 전달되지 않습니다.
@@ -240,11 +242,12 @@
   // 카카오톡 방 나가기처럼 확인 후에만 목록에서 제거합니다.
   function showLeaveModal(room){
     const host=document.querySelector('#modal-root');
-    host.innerHTML=`<div class="modal-backdrop"><section class="consent-modal leave-modal" role="dialog" aria-modal="true" aria-labelledby="leave-title"><div class="leave-icon">🚪</div><h2 id="leave-title">정말 약속방을 나갈까요?</h2><p><strong>${escapeHtml(room.name)}</strong>에서 나가면 이 브라우저의 약속 목록에서 사라져요.</p><p class="hint">이 방의 로컬 채팅·만남 도감·말풍선 기록과 내 이동·공유 설정도 삭제돼요. 서버가 없는 데모라 다른 친구에게 퇴장 알림이 전달되지는 않아요.</p><div class="modal-actions"><button class="button leave-confirm full" data-leave-confirm>네, 약속방 나가기</button><button class="button secondary full" data-leave-cancel>취소하고 머무르기</button></div></section></div>`;
+    host.innerHTML=`<div class="modal-backdrop"><section class="consent-modal leave-modal" role="dialog" aria-modal="true" aria-labelledby="leave-title"><div class="leave-icon">🚪</div><h2 id="leave-title">정말 약속방을 나갈까요?</h2><p><strong>${escapeHtml(room.name)}</strong>에서 나가면 이 브라우저의 약속 목록에서 사라져요.</p><p class="hint">이 방의 로컬 채팅·만남 도감·말풍선 기록과 내 이동·공유 설정도 삭제돼요. Firebase 약속방에서는 내 참여 권한도 삭제돼요. 기존 로컬 기록도 정리됩니다.</p><div class="modal-actions"><button class="button leave-confirm full" data-leave-confirm>네, 약속방 나가기</button><button class="button secondary full" data-leave-cancel>취소하고 머무르기</button></div></section></div>`;
     host.querySelector('[data-leave-cancel]').focus();
   }
   function closeLeaveModal(){document.querySelector('#modal-root').innerHTML='';}
-  function leaveRoom(room){
+  async function leaveRoom(room){
+    if(room.remote){try{await F.leave(room.code);}catch(e){notify('퇴장 실패: '+e.message);return;}}
     if(liveGps.roomId===room.id)stopGps();
     // 저장 실패 시 방이 목록에서 사라졌다고 안내하지 않습니다.
     try{
@@ -314,29 +317,32 @@
   function newCode() {
     const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let code;
     do {
-      const nums=new Uint32Array(6);
+      const nums=new Uint32Array(12);
       if(globalThis.crypto?.getRandomValues)crypto.getRandomValues(nums);
-      else for(let i=0;i<6;i++)nums[i]=Math.floor(Math.random()*0xffffffff);
+      else for(let i=0;i<12;i++)nums[i]=Math.floor(Math.random()*0xffffffff);
       code=Array.from(nums,n=>alphabet[n%alphabet.length]).join('');
     }while(rooms.some(r=>r.code===code)||code==='DEMO24');
     return code;
   }
-  function createRoom(form) {
+  async function createRoom(form) {
     const values=new FormData(form),name=String(values.get('name')||'').trim(),date=String(values.get('date')||''),time=String(values.get('time')||''),place=String(values.get('place')||'').trim();
     const error=document.querySelector('#form-error');
     if(!name||!date||!time||!place||name.length>50||place.length>100||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!/^[0-9]{2}:[0-9]{2}$/.test(time)) {
       error.textContent='약속 이름, 날짜, 시간, 장소를 올바르게 입력해 주세요.';error.hidden=false;return;
     }
-    const room={id:globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`,name,date,time,place,code:newCode()};
-    rooms.push(room);saveRooms();selectedId=room.id;screen='success';render();
+    const draft={name,date,time,place,code:newCode()};
+    try{const room=await F.create(draft);rooms.push(room);saveRooms();selectedId=room.id;screen='success';render();}
+    catch(e){error.textContent='방 생성 실패: '+e.message;error.hidden=false;}
   }
-  function joinRoom(form) {
+  async function joinRoom(form) {
     const code=String(new FormData(form).get('code')||'').trim().toUpperCase();
-    const room=code==='DEMO24'&&!demoLeft?demoRoom():rooms.find(r=>String(r.code||'').toUpperCase()===code);
-    if(!room){const error=form.querySelector('#join-error');error.textContent='이 브라우저에서 찾을 수 없는 코드예요. 실제 친구 간 참여는 서버 연동 후 가능해요.';error.hidden=false;return;}
+    let room=code==='DEMO24'&&!demoLeft?demoRoom():rooms.find(r=>String(r.code||'').toUpperCase()===code);
+    if(!room){try{room=await F.join(code);rooms.push(room);saveRooms();}catch(e){const error=document.querySelector('#join-error');if(error){error.textContent=e.message;error.hidden=false;}return;}}
     selectedId=room.id;selectedPerson=null;screen='detail';render();
   }
   function render() {
+    if(screen==='chat'&&currentRoom()?.remote){const room=currentRoom();if(!chatUnsubscribe||chatUnsubscribe.room!==room.id){chatUnsubscribe?.();const unsub=F.listen(room.code,m=>{remoteMessages[room.id]=m;if(screen==='chat'&&selectedId===room.id){const scroll=document.querySelector('#chat-messages');renderChat(room);}},e=>notify('채팅 연결 오류: '+e.message));unsub.room=room.id;chatUnsubscribe=unsub;}}
+    else if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.go===(screen==='create'?'create':['rooms','detail','success','chat','sns','memory','transport'].includes(screen)?'rooms':'home')));
     if(screen==='privacy')renderPrivacy();else if(screen==='home')renderHome();else if(screen==='create')renderCreate();else if(screen==='rooms')renderRooms();
     else {
