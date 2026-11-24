@@ -126,8 +126,13 @@
       <section class="detail-card detail-invite"><h2>친구를 초대해요 💌</h2>${invite}<button class="button ghost full" data-reveal-code aria-expanded="false">🔒 초대 코드 보기</button><div id="private-code" hidden>${codeBox(room)}</div></section>
       <div class="detail-actions"><button class="button secondary" data-transport="open">🚌 내 이동수단 설정</button><button class="button secondary" data-invite>💌 친구 초대</button><button class="button secondary" data-chat>💬 채팅</button><button class="button secondary" data-memory>📒 우리 모임의 만남 도감</button></div><div class="simulation-actions"><button class="button ghost" data-simulate="5">⏱ 5분 경과</button><button class="button ghost" data-arrive>✓ 도착 완료</button></div><div class="actions"><button class="button ghost full" data-go="privacy">🔒 개인정보 보호 안내</button><button class="button ghost full" data-go="home">홈으로 돌아가기</button><button class="button leave-room-button full" data-leave-room>🚪 약속방 나가기</button></div>`;
     updateGpsMap(room);
+    
+    document.getElementById('gachiga-my-location')
+      ?.addEventListener('click', () => {
+        globalThis.GachigaMap.showMyLocation();
+      });
   }
-
+  
   // 5번 아이디어: 같은 약속방에 기록을 쌓아 만남 횟수와 자주 간 장소를 확인합니다.
   function renderMemory(room){
     const demoEntries=room.demo?[
