@@ -34,6 +34,7 @@
         center: defaultPosition,
         level: 5
       });
+      root.GachigaMap.currentMap = map;
 
       const place = String(room?.place || '').trim();
 
@@ -108,13 +109,54 @@
     });
 
     return `
-      <div
-        id="gachiga-kakao-map"
-        aria-label="카카오 실제 지도"
-        style="width:100%; height:360px; border-radius:18px;"
-      ></div>
-    `;
+  <button
+    type="button"
+    id="gachiga-my-location"
+    class="button secondary"
+    style="margin-bottom:12px;"
+  >
+    📍 내 위치 표시
+  </button>
+
+  <div
+    id="gachiga-kakao-map"
+    aria-label="카카오 실제 지도"
+    style="width:100%; height:360px; border-radius:18px;"
+  ></div>
+`;
+  }
+function showMyLocation() {
+  const map = root.GachigaMap.currentMap;
+  const status = document.getElementById('gps-status');
+
+  if (!navigator.geolocation) {
+    if (status) status.textContent = '이 브라우저는 위치 기능을 지원하지 않아요.';
+    return;
   }
 
-  root.GachigaMap = { render };
+  if (status) status.textContent = '현재 위치를 확인하고 있어요.';
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      const myPosition = new root.kakao.maps.LatLng(
+        position.coords.latitude,
+        position.coords.longitude
+      );
+
+      map.setCenter(myPosition);
+
+      new root.kakao.maps.Marker({
+        map: map,
+        position: myPosition,
+        title: '내 현재 위치'
+      });
+
+      if (status) status.textContent = '내 현재 위치를 지도에 표시했어요.';
+    },
+    () => {
+      if (status) status.textContent = '위치 권한을 허용해야 내 위치를 표시할 수 있어요.';
+    }
+  );
+}
+    root.GachigaMap = { render, showMyLocation };
 })(globalThis);
