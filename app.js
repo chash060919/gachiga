@@ -485,29 +485,29 @@ async function startGps(room) {
   document.addEventListener('click',async event=>{
     if(event.target.closest('[data-consent-decline]')){closeConsent();notify('동의하지 않아도 다른 기능은 사용할 수 있어요.');return;}
     if(event.target.closest('#consent-confirm')){
-  const room=currentRoom(),checked=document.querySelector('#consent-check')?.checked;
+      const room=currentRoom(),checked=document.querySelector('#consent-check')?.checked;
 
-  if(!room||room.id!==consentRoomId||!checked||!P.canStart(privacyFor(room),checked))return;
+      if(!room||room.id!==consentRoomId||!checked||!P.canStart(privacyFor(room),checked))return;
 
-  try{
-    P.save(localStorage,room.id,{consented:true,ended:false});
-    privacySessions[room.id]=true;
+      try{
+        P.save(localStorage,room.id,{consented:true,ended:false});
+        privacySessions[room.id]=true;
 
-    if(room.remote){
-      await startGps(room);
-      listenRoomLocations(room);
+        if(room.remote){
+          await startGps(room);
+          listenRoomLocations(room);
+        }
+
+        closeConsent();
+        render();
+        notify('위치 공유를 시작했어요.');
+      }catch(error){
+        console.error('위치 공유 시작 실패:',error);
+        notify('동의 상태를 저장하거나 위치 공유를 시작하지 못했어요.');
+      }
+
+      return;
     }
-
-    closeConsent();
-    render();
-    notify('위치 공유를 시작했어요.');
-  }catch(error){
-    console.error('위치 공유 시작 실패:',error);
-    notify('동의 상태를 저장하거나 위치 공유를 시작하지 못했어요.');
-  }
-
-  return;
-}
     if(event.target.closest('[data-share-start]')){
   const room=currentRoom(),state=privacyFor(room);
   if(state.ended)return;
