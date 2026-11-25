@@ -461,16 +461,65 @@ async function startGps(room) {
     if(!name||!date||!time||!place||name.length>50||place.length>100||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)||!/^[0-9]{2}:[0-9]{2}$/.test(time)) {
       error.textContent='약속 이름, 날짜, 시간, 장소를 올바르게 입력해 주세요.';error.hidden=false;return;
     }
-    const draft={name,date,time,place,code:newCode()};
+    const displayName = prompt('지도에 표시할 이름을 입력해 주세요.');
+
+if (!displayName || !displayName.trim()) {
+  error.textContent = '이름을 입력해 주세요.';
+  error.hidden = false;
+  return;
+}
+
+const draft = {
+  name,
+  date,
+  time,
+  place,
+  displayName: displayName.trim(),
+  code: newCode()
+};
     try{const room=await F.create(draft);rooms.push(room);saveRooms();selectedId=room.id;screen='success';render();}
     catch(e){error.textContent='방 생성 실패: '+e.message;error.hidden=false;}
   }
   async function joinRoom(form) {
-    const code=String(new FormData(form).get('code')||'').trim().toUpperCase();
-    let room=code==='DEMO24'&&!demoLeft?demoRoom():rooms.find(r=>String(r.code||'').toUpperCase()===code);
-    if(!room){try{room=await F.join(code);rooms.push(room);saveRooms();}catch(e){const error=document.querySelector('#join-error');if(error){error.textContent=e.message;error.hidden=false;}return;}}
-    selectedId=room.id;selectedPerson=null;screen='detail';render();
+  const code = String(
+    new FormData(form).get('code') || ''
+  ).trim().toUpperCase();
+
+  let room = code === 'DEMO24' && !demoLeft
+    ? demoRoom()
+    : rooms.find(r => String(r.code || '').toUpperCase() === code);
+
+  if (!room) {
+    const displayName = prompt('지도에 표시할 이름을 입력해 주세요.');
+
+    if (!displayName || !displayName.trim()) {
+      const error = document.querySelector('#join-error');
+      if (error) {
+        error.textContent = '이름을 입력해 주세요.';
+        error.hidden = false;
+      }
+      return;
+    }
+
+    try {
+      room = await F.join(code, displayName.trim());
+      rooms.push(room);
+      saveRooms();
+    } catch (e) {
+      const error = document.querySelector('#join-error');
+      if (error) {
+        error.textContent = e.message;
+        error.hidden = false;
+      }
+      return;
+    }
   }
+
+  selectedId = room.id;
+  selectedPerson = null;
+  screen = 'detail';
+  render();
+}
   function render() {
     if(screen==='chat'&&currentRoom()?.remote){const room=currentRoom();if(!chatUnsubscribe||chatUnsubscribe.room!==room.id){chatUnsubscribe?.();const unsub=F.listen(room.code,m=>{remoteMessages[room.id]=m;if(screen==='chat'&&selectedId===room.id){const scroll=document.querySelector('#chat-messages');renderChat(room);}},e=>notify('채팅 연결 오류: '+e.message));unsub.room=room.id;chatUnsubscribe=unsub;}}
     else if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
