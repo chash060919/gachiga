@@ -153,8 +153,18 @@ function showMyLocation() {
 
       if (status) status.textContent = '내 현재 위치를 지도에 표시했어요.';
     },
-    () => {
-      if (status) status.textContent = '위치 권한을 허용해야 내 위치를 표시할 수 있어요.';
+        (error) => {
+      if (!status) return;
+
+      if (error.code === 1) {
+        status.textContent = '위치 권한이 거부되었어요. 브라우저 설정에서 허용해 주세요.';
+      } else if (error.code === 2) {
+        status.textContent = '현재 위치를 확인할 수 없어요. 기기의 위치 설정을 확인해 주세요.';
+      } else if (error.code === 3) {
+        status.textContent = '위치 확인 시간이 초과됐어요. 다시 시도해 주세요.';
+      } else {
+        status.textContent = `GPS 오류: ${error.message}`;
+      }
     }
   );
 }
