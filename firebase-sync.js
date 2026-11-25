@@ -30,5 +30,74 @@ function listen(code,onData,onError){let unsub=()=>{},cancelled=false;ready.then
  onData(snap.docs.map(d=>{const v=d.data();return {id:d.id,sender:v.sender===state.uid?'me':v.sender,name:v.sender===state.uid?'나':'친구',text:v.text,at:v.at?.toDate?.()?.toISOString()||new Date().toISOString()};}));
  },onError);}catch(e){onError(e);}
  });return ()=>{cancelled=true;unsub();};}
-root.GachigaFirebase={state,ready,create,join,leave,send,listen};
+ 
+// 내 현재 위치를 Firebase에 저장
+async function setLocation(code, latitude, longitude){
+ await ready;
+ requireReady();
+
+ if(!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180){
+  throw Error('올바르지 않은 위치 정보입니다.');
+ }
+
+ await api.setDoc(
+  api.doc(db,'rooms',code,'locations',state.uid),
+  {
+   latitude,
+   longitude,
+   updatedAt:api.serverTimestamp()
+  }
+ );
+}
+
+// 약속방 참여자들의 위치를 실시간으로 받기
+function listenLocations(code,onData,onError){
+ let unsub=()=>{},cancelled=false;
+
+ ready.then(()=>{
+  if(cancelled)return;
+
+  try{
+   requireReady();
+
+   unsub=api.onSnapshot(
+    api.collection(db,'rooms',code,'locations'),
+    snap=>{
+     onData(snap.docs.map(d=>{
+      const v=d.data();
+      return {
+       uid:d.id,
+       latitude:v.latitude,
+       longitude:v.longitude
+      };
+     }));
+    },
+    onError
+   );
+  }catch(e){
+   onError(e);
+  }
+ });
+
+ return ()=>{
+  cancelled=true;
+  unsub();
+ };
+}
+
+// 내 위치 공유 중지 및 위치 정보 삭제
+async function deleteLocation(code){
+ await ready;
+ requireReady();
+
+ await api.deleteDoc(
+  api.doc(db,'rooms',code,'locations',state.uid)
+ );
+}
+
+root.GachigaFirebase={
+ state,ready,create,join,leave,send,listen,
+ setLocation,listenLocations,deleteLocation
+};
 })(globalThis);
