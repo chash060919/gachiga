@@ -17,21 +17,69 @@ function showParticipantLocations(locations) {
   participantMarkers.forEach(marker => marker.setMap(null));
   participantMarkers = [];
 
+  const colors = [
+    '#3B82F6',
+    '#F97316',
+    '#A855F7',
+    '#16A34A',
+    '#EC4899',
+    '#EAB308',
+    '#06B6D4',
+    '#EF4444'
+  ];
+
   latestLocations.forEach(person => {
     const position = new root.kakao.maps.LatLng(
       person.latitude,
       person.longitude
     );
 
+    // UID를 기준으로 항상 같은 색상 선택
+    let hash = 0;
+    for (let i = 0; i < person.uid.length; i++) {
+      hash = (hash * 31 + person.uid.charCodeAt(i)) >>> 0;
+    }
+
+    const color = colors[hash % colors.length];
+    const name = person.displayName || '참여자';
+
+    // 사용자별 색상 마커
     const marker = new root.kakao.maps.Marker({
       map,
       position,
-      title: person.uid === root.GachigaFirebase.state.uid
-        ? '내 위치'
-        : '참여자 위치'
+      title: name
+    });
+
+    // 마커 옆에 이름 표시
+    const label = new root.kakao.maps.CustomOverlay({
+      map,
+      position,
+      content: `
+        <div style="
+          background:${color};
+          color:white;
+          padding:6px 11px;
+          border-radius:15px;
+          font-size:12px;
+          font-weight:bold;
+          white-space:nowrap;
+          box-shadow:0 2px 6px rgba(0,0,0,0.2);
+          margin-bottom:42px;
+        ">
+          ${name.replace(/[&<>"']/g, char => ({
+            '&':'&amp;',
+            '<':'&lt;',
+            '>':'&gt;',
+            '"':'&quot;',
+            "'":'&#39;'
+          })[char])}
+        </div>
+      `,
+      yAnchor: 1
     });
 
     participantMarkers.push(marker);
+    participantMarkers.push(label);
   });
 }
   function render(participants, room) {
