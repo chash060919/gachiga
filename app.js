@@ -85,7 +85,6 @@ async function startGps(room) {
     return;
   }
 
-  // 기존 GPS가 실행 중이면 먼저 중지
   if (liveGps.watchId !== null) {
     await stopGps();
   }
@@ -94,7 +93,6 @@ async function startGps(room) {
 
   liveGps.watchId = navigator.geolocation.watchPosition(
     async (position) => {
-      // 다른 약속방으로 이동했다면 위치를 저장하지 않음
       if (liveGps.roomId !== room.id) return;
 
       try {
@@ -121,7 +119,6 @@ async function startGps(room) {
     }
   );
 }
-
 // 약속방 참여자들의 위치를 실시간으로 받기
 function listenRoomLocations(room) {
   if (!room || !room.remote) return;
