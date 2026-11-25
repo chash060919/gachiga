@@ -3,7 +3,7 @@
 'use strict';
 const config={apiKey:'AIzaSyBtMrFLOBvfs6FASWhRApupso-zBmiHgjE',authDomain:'gachiga-52765.firebaseapp.com',projectId:'gachiga-52765',storageBucket:'gachiga-52765.firebasestorage.app',messagingSenderId:'519752912571',appId:'1:519752912571:web:73f309c7953a297884e39e'};
 const state={ready:false,uid:null,error:null};let db,auth,api;
-const base='https://www.gstatic.com/firebasejs/10.14.1/';
+const base='https://www.gstatic.com/firebasejs/10.14.1/'; 
 const ready=(async()=>{
  try{
   const [a,b,c]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js')]);
