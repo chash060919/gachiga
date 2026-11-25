@@ -121,7 +121,9 @@ async function startGps(room) {
     }
   );
 }
-  function listenRoomLocations(room) {
+
+// 약속방 참여자들의 위치를 실시간으로 받기
+function listenRoomLocations(room) {
   if (!room || !room.remote) return;
 
   if (liveGps.unsubscribe) {
