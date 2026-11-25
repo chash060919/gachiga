@@ -101,7 +101,7 @@ async function startGps(room) {
         await F.setLocation(
           room.code,
           position.coords.latitude,
-          position.coords.longitude
+          position.coords.longitude,
           room.displayName
         );
       } catch (error) {
