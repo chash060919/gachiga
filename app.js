@@ -55,7 +55,13 @@ function stopGps() {
 }
 
 function updateGpsMap(room) {
-  // 친구 위치 마커 연결은 다음 단계에서 구현
+  if (!room || !room.remote) return;
+
+  if (!globalThis.GachigaMap) return;
+
+  globalThis.GachigaMap.showParticipantLocations(
+    liveGps.locations || []
+  );
 }
 function startGps(room) {
   if (!room || !room.remote) {
