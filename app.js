@@ -33,11 +33,93 @@
   let privacyReturn='home';
   let pendingInviteCode=V.codeFromSearch(window.location.search);
   // 데모 모드에서는 실제 GPS나 외부 지도 API를 호출하지 않습니다.
-  const liveGps={roomId:null};
-  function stopGps(){} // 기존 화면 전환 코드와의 호환성 유지
-  function updateGpsMap(room){} // HTML/CSS 데모 지도만 사용
+  const liveGps = {
+  roomId: null,
+  watchId: null,
+  unsubscribe: null,
+  locations: []
+};
 
+function stopGps() {
+  if (liveGps.watchId !== null) {
+    navigator.geolocation.clearWatch(liveGps.watchId);
+    liveGps.watchId = null;
+  }
 
+  if (liveGps.unsubscribe) {
+    liveGps.unsubscribe();
+    liveGps.unsubscribe = null;
+  }
+
+  liveGps.roomId = null;
+}
+
+function updateGpsMap(room) {
+  // 친구 위치 마커 연결은 다음 단계에서 구현
+}
+function startGps(room) {
+  if (!room || !room.remote) {
+    notify('실제 약속방에서만 위치를 공유할 수 있어요.');
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    notify('이 브라우저는 GPS를 지원하지 않아요.');
+    return;
+  }
+
+  if (liveGps.watchId !== null) {
+    stopGps();
+  }
+
+  liveGps.roomId = room.id;
+
+  liveGps.watchId = navigator.geolocation.watchPosition(
+    async (position) => {
+      try {
+        await F.setLocation(
+          room.code,
+          position.coords.latitude,
+          position.coords.longitude
+        );
+      } catch (error) {
+        console.error('위치 저장 실패:', error);
+        notify('위치를 저장하지 못했어요.');
+      }
+    },
+    (error) => {
+      console.error('GPS 오류:', error);
+      notify('위치를 확인할 수 없어요. 위치 권한을 확인해 주세요.');
+      stopGps();
+    },
+    {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 15000
+    }
+  );
+}
+  function listenRoomLocations(room) {
+  if (!room || !room.remote) return;
+
+  if (liveGps.unsubscribe) {
+    liveGps.unsubscribe();
+  }
+
+  liveGps.unsubscribe = F.listenLocations(
+    room.code,
+    (locations) => {
+      console.log('약속방 참여자 위치:', locations);
+
+      // 다음 단계에서 카카오맵에 친구 위치를 표시할 예정
+      liveGps.locations = locations;
+      updateGpsMap(room);
+    },
+    (error) => {
+      console.error('친구 위치 수신 실패:', error);
+    }
+  );
+}
   function escapeHtml(value) {
     return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   }
@@ -361,7 +443,17 @@
     if(event.target.closest('#consent-confirm')){
       const room=currentRoom(),checked=document.querySelector('#consent-check')?.checked;
       if(!room||room.id!==consentRoomId||!checked||!P.canStart(privacyFor(room),checked))return;
-      try{P.save(localStorage,room.id,{consented:true,ended:false});privacySessions[room.id]=true;closeConsent();render();notify('데모 위치 공유를 시작했어요.');}catch{notify('동의 상태를 저장할 수 없어 공유를 시작하지 않았어요.');}return;
+      try{P.save(localStorage,room.id,{consented:true,ended:false});
+privacySessions[room.id]=true;
+
+if (room.remote) {
+  startGps(room);
+  listenRoomLocations(room);
+}
+
+closeConsent();
+render();
+notify('위치 공유를 시작했어요.'););}catch{notify('동의 상태를 저장할 수 없어 공유를 시작하지 않았어요.');}return;
     }
     if(event.target.closest('[data-share-start]')){const room=currentRoom(),state=privacyFor(room);if(state.ended)return;if(state.consented){privacySessions[room.id]=true;render();notify('기존 동의를 확인하고 데모 공유를 시작했어요.');}else consentModal(room);return;}
     if(event.target.closest('[data-share-stop]')){const room=currentRoom();stopGps();privacySessions[room.id]=false;selectedPerson=null;render();notify('데모 위치 공유를 중지했어요.');return;}
