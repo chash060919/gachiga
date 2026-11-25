@@ -74,7 +74,7 @@ function updateGpsMap(room) {
     liveGps.locations || []
   );
 }
-function startGps(room) {
+async function startGps(room) {
   if (!room || !room.remote) {
     notify('실제 약속방에서만 위치를 공유할 수 있어요.');
     return;
@@ -85,14 +85,18 @@ function startGps(room) {
     return;
   }
 
+  // 기존 GPS가 실행 중이면 먼저 중지
   if (liveGps.watchId !== null) {
-    stopGps();
+    await stopGps();
   }
 
   liveGps.roomId = room.id;
 
   liveGps.watchId = navigator.geolocation.watchPosition(
     async (position) => {
+      // 다른 약속방으로 이동했다면 위치를 저장하지 않음
+      if (liveGps.roomId !== room.id) return;
+
       try {
         await F.setLocation(
           room.code,
@@ -481,20 +485,29 @@ function startGps(room) {
   document.addEventListener('click',async event=>{
     if(event.target.closest('[data-consent-decline]')){closeConsent();notify('동의하지 않아도 다른 기능은 사용할 수 있어요.');return;}
     if(event.target.closest('#consent-confirm')){
-      const room=currentRoom(),checked=document.querySelector('#consent-check')?.checked;
-      if(!room||room.id!==consentRoomId||!checked||!P.canStart(privacyFor(room),checked))return;
-      try{P.save(localStorage,room.id,{consented:true,ended:false});
-privacySessions[room.id]=true;
+  const room=currentRoom(),checked=document.querySelector('#consent-check')?.checked;
 
-if (room.remote) {
-  startGps(room);
-  listenRoomLocations(room);
-}
+  if(!room||room.id!==consentRoomId||!checked||!P.canStart(privacyFor(room),checked))return;
 
-closeConsent();
-render();
-notify('위치 공유를 시작했어요.'););}catch{notify('동의 상태를 저장할 수 없어 공유를 시작하지 않았어요.');}return;
+  try{
+    P.save(localStorage,room.id,{consented:true,ended:false});
+    privacySessions[room.id]=true;
+
+    if(room.remote){
+      await startGps(room);
+      listenRoomLocations(room);
     }
+
+    closeConsent();
+    render();
+    notify('위치 공유를 시작했어요.');
+  }catch(error){
+    console.error('위치 공유 시작 실패:',error);
+    notify('동의 상태를 저장하거나 위치 공유를 시작하지 못했어요.');
+  }
+
+  return;
+}
     if(event.target.closest('[data-share-start]')){
   const room=currentRoom(),state=privacyFor(room);
   if(state.ended)return;
