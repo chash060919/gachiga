@@ -102,6 +102,7 @@ async function startGps(room) {
           room.code,
           position.coords.latitude,
           position.coords.longitude
+          room.displayName
         );
       } catch (error) {
         console.error('위치 저장 실패:', error);
