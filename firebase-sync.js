@@ -64,23 +64,26 @@ function listen(code,onData,onError){let unsub=()=>{},cancelled=false;ready.then
  });return ()=>{cancelled=true;unsub();};}
  
 // 내 현재 위치를 Firebase에 저장
-async function setLocation(code, latitude, longitude){
- await ready;
- requireReady();
+async function setLocation(code, latitude, longitude, displayName) {
+  await ready;
+  requireReady();
 
- if(!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-    !Number.isFinite(longitude) || longitude < -180 || longitude > 180){
-  throw Error('올바르지 않은 위치 정보입니다.');
- }
-
- await api.setDoc(
-  api.doc(db,'rooms',code,'locations',state.uid),
-  {
-   latitude,
-   longitude,
-   updatedAt:api.serverTimestamp()
+  if (
+    !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+    !Number.isFinite(longitude) || longitude < -180 || longitude > 180
+  ) {
+    throw Error('올바르지 않은 위치 정보입니다.');
   }
- );
+
+  await api.setDoc(
+    api.doc(db, 'rooms', code, 'locations', state.uid),
+    {
+      latitude,
+      longitude,
+      displayName: String(displayName || '참여자').trim(),
+      updatedAt: api.serverTimestamp()
+    }
+  );
 }
 
 // 약속방 참여자들의 위치를 실시간으로 받기
@@ -99,10 +102,11 @@ function listenLocations(code,onData,onError){
      onData(snap.docs.map(d=>{
       const v=d.data();
       return {
-       uid:d.id,
-       latitude:v.latitude,
-       longitude:v.longitude
-      };
+  uid: d.id,
+  latitude: v.latitude,
+  longitude: v.longitude,
+  displayName: v.displayName || '참여자'
+};
      }));
     },
     onError
