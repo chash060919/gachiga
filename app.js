@@ -74,6 +74,7 @@ function updateGpsMap(room) {
     liveGps.locations || []
   );
 }
+
 async function startGps(room) {
   if (!room || !room.remote) {
     notify('실제 약속방에서만 위치를 공유할 수 있어요.');
@@ -92,7 +93,7 @@ async function startGps(room) {
   liveGps.roomId = room.id;
 
   liveGps.watchId = navigator.geolocation.watchPosition(
-    async (position) => {
+    async function(position) {
       if (liveGps.roomId !== room.id) return;
 
       try {
@@ -107,11 +108,13 @@ async function startGps(room) {
         notify('위치를 저장하지 못했어요.');
       }
     },
-    (error) => {
+
+    function(error) {
       console.error('GPS 오류:', error);
       notify('위치를 확인할 수 없어요. 위치 권한을 확인해 주세요.');
       stopGps();
     },
+
     {
       enableHighAccuracy: true,
       maximumAge: 10000,
@@ -119,6 +122,7 @@ async function startGps(room) {
     }
   );
 }
+
 // 약속방 참여자들의 위치를 실시간으로 받기
 function listenRoomLocations(room) {
   if (!room || !room.remote) return;
