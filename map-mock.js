@@ -4,6 +4,35 @@
   'use strict';
 
   let renderToken = 0;
+  let participantMarkers = [];
+
+function showParticipantLocations(locations) {
+  const map = root.GachigaMap.currentMap;
+
+  if (!map || !root.kakao?.maps) return;
+
+  // 기존 친구 위치 마커 제거
+  participantMarkers.forEach(marker => marker.setMap(null));
+  participantMarkers = [];
+
+  // 새 위치 표시
+  locations.forEach(person => {
+    const position = new root.kakao.maps.LatLng(
+      person.latitude,
+      person.longitude
+    );
+
+    const marker = new root.kakao.maps.Marker({
+      map,
+      position,
+      title: person.uid === root.GachigaFirebase.state.uid
+        ? '내 위치'
+        : '참여자 위치'
+    });
+
+    participantMarkers.push(marker);
+  });
+}
 
   function render(participants, room) {
     const token = ++renderToken;
@@ -168,5 +197,10 @@ function showMyLocation() {
     }
   );
 }
-    root.GachigaMap = { render, showMyLocation };
+    root.GachigaMap = {
+  render,
+  showMyLocation,
+  showParticipantLocations,
+  currentMap: null
+};
 })(globalThis);
