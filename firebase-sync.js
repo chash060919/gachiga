@@ -14,12 +14,32 @@ const ready=(async()=>{
 function requireReady(){if(!state.ready)throw Error('Firebase 연결에 실패했어요. 인터넷 연결과 Firebase 설정을 확인해 주세요.');}
 const ref=code=>api.doc(db,'rooms',code);
 const member=(code,uid=state.uid)=>api.doc(db,'rooms',code,'members',uid);
-async function create(room){await ready;requireReady();const code=room.code;
- await api.setDoc(ref(code),{name:room.name,date:room.date,time:room.time,place:room.place,owner:state.uid,createdAt:api.serverTimestamp()});
- await api.setDoc(member(code), {
-  joinedAt: api.serverTimestamp(),
-  displayName: String(room.displayName || '').trim()
-});return {...room,id:code,remote:true};
+async function create(room) {
+  await ready;
+  requireReady();
+
+  const code = room.code;
+  const displayName = String(room.displayName || '').trim();
+
+  if (!displayName || displayName.length > 12) {
+    throw Error('이름은 1~12자로 입력해 주세요.');
+  }
+
+  await api.setDoc(ref(code), {
+    name: room.name,
+    date: room.date,
+    time: room.time,
+    place: room.place,
+    owner: state.uid,
+    createdAt: api.serverTimestamp()
+  });
+
+  await api.setDoc(member(code), {
+    joinedAt: api.serverTimestamp(),
+    displayName
+  });
+
+  return { ...room, id: code, remote: true };
 }
 async function join(code, displayName) {
   await ready;
@@ -47,11 +67,12 @@ async function join(code, displayName) {
   });
 
   return {
-    id: code,
-    code,
-    ...snap.data(),
-    remote: true
-  };
+  id: code,
+  code,
+  ...snap.data(),
+  displayName: name,
+  remote: true
+};
 }
 async function leave(code){await ready;requireReady();await api.deleteDoc(member(code));}
 async function send(code,text){await ready;requireReady();const clean=String(text).trim();if(!clean||clean.length>1000)throw Error('메시지는 1~1000자로 입력해 주세요.');
