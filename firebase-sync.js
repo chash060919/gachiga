@@ -16,10 +16,42 @@ const ref=code=>api.doc(db,'rooms',code);
 const member=(code,uid=state.uid)=>api.doc(db,'rooms',code,'members',uid);
 async function create(room){await ready;requireReady();const code=room.code;
  await api.setDoc(ref(code),{name:room.name,date:room.date,time:room.time,place:room.place,owner:state.uid,createdAt:api.serverTimestamp()});
- await api.setDoc(member(code),{joinedAt:api.serverTimestamp()});return {...room,id:code,remote:true};
+ await api.setDoc(member(code), {
+  joinedAt: api.serverTimestamp(),
+  displayName: String(room.displayName || '').trim()
+});return {...room,id:code,remote:true};
 }
-async function join(code){await ready;requireReady();const snap=await api.getDoc(ref(code));if(!snap.exists())throw Error('초대 코드에 해당하는 방이 없어요.');
- await api.setDoc(member(code),{joinedAt:api.serverTimestamp()});return {id:code,code,...snap.data(),remote:true};
+async function join(code, displayName) {
+  await ready;
+  requireReady();
+
+  const name = String(displayName || '').trim();
+
+  if (!name) {
+    throw Error('지도에 표시할 이름을 입력해 주세요.');
+  }
+
+  if (name.length > 12) {
+    throw Error('이름은 12자 이하로 입력해 주세요.');
+  }
+
+  const snap = await api.getDoc(ref(code));
+
+  if (!snap.exists()) {
+    throw Error('초대 코드에 해당하는 방이 없어요.');
+  }
+
+  await api.setDoc(member(code), {
+    joinedAt: api.serverTimestamp(),
+    displayName: name
+  });
+
+  return {
+    id: code,
+    code,
+    ...snap.data(),
+    remote: true
+  };
 }
 async function leave(code){await ready;requireReady();await api.deleteDoc(member(code));}
 async function send(code,text){await ready;requireReady();const clean=String(text).trim();if(!clean||clean.length>1000)throw Error('메시지는 1~1000자로 입력해 주세요.');
