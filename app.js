@@ -40,7 +40,7 @@
   locations: []
 };
 
-function stopGps() {
+async function stopGps() {
   if (liveGps.watchId !== null) {
     navigator.geolocation.clearWatch(liveGps.watchId);
     liveGps.watchId = null;
@@ -51,7 +51,18 @@ function stopGps() {
     liveGps.unsubscribe = null;
   }
 
+  const room = rooms.find(r => r.id === liveGps.roomId);
+
   liveGps.roomId = null;
+  liveGps.locations = [];
+
+  if (room?.remote) {
+    try {
+      await F.deleteLocation(room.code);
+    } catch (error) {
+      console.error('위치 삭제 실패:', error);
+    }
+  }
 }
 
 function updateGpsMap(room) {
@@ -340,20 +351,43 @@ function startGps(room) {
   }
   function closeLeaveModal(){document.querySelector('#modal-root').innerHTML='';}
   async function leaveRoom(room){
-    if(room.remote){try{await F.leave(room.code);}catch(e){notify('퇴장 실패: '+e.message);return;}}
-    if(liveGps.roomId===room.id)stopGps();
-    // 저장 실패 시 방이 목록에서 사라졌다고 안내하지 않습니다.
+    // 위치 정보부터 삭제
+    if(room.remote){
+      try{
+        await F.deleteLocation(room.code);
+      }catch(e){
+        notify('위치 정보를 삭제하지 못해 퇴장을 취소했어요.');
+        return;
+      }
+    }
+
+    // GPS 및 위치 수신 중지
+    if(liveGps.roomId===room.id) await stopGps();
+
+    // Firebase 약속방에서 퇴장
+    if(room.remote){
+      try{
+        await F.leave(room.code);
+      }catch(e){
+        notify('퇴장 실패: '+e.message);
+        return;
+      }
+    }
+
+    // 기존 정리 기능 유지
     try{
       rooms=globalThis.GachigaRoomLeave.leave(localStorage,room,rooms,P.KEY,S.key);
-      // 나간 약속방의 만남 기록과 말풍선도 정리합니다.
-      localStorage.removeItem(M.key(room.id));localStorage.removeItem(M.bubbleKey(room.id));
+      localStorage.removeItem(M.key(room.id));
+      localStorage.removeItem(M.bubbleKey(room.id));
       if(room.demo)demoLeft=true;
       delete privacySessions[room.id];delete ownPeople[room.id];delete simOffsets[room.id];
       if(room.demo){const index=demoPeople.findIndex(p=>p.id==='me');if(index!==-1)demoPeople.splice(index,1);}
       selectedId=null;selectedPerson=null;transportMode=null;shareSelection={};screen='rooms';
       closeLeaveModal();render();notify('약속방에서 나왔어요.');
-    }catch{notify('약속방 나가기를 저장하지 못했어요. 다시 시도해 주세요.');}
-  }
+    }catch{
+      notify('약속방 나가기를 저장하지 못했어요. 다시 시도해 주세요.');
+    }
+}
   function consentModal(room){
     consentRoomId=room.id;
     const host=document.querySelector('#modal-root');
@@ -461,8 +495,34 @@ closeConsent();
 render();
 notify('위치 공유를 시작했어요.'););}catch{notify('동의 상태를 저장할 수 없어 공유를 시작하지 않았어요.');}return;
     }
-    if(event.target.closest('[data-share-start]')){const room=currentRoom(),state=privacyFor(room);if(state.ended)return;if(state.consented){privacySessions[room.id]=true;render();notify('기존 동의를 확인하고 데모 공유를 시작했어요.');}else consentModal(room);return;}
-    if(event.target.closest('[data-share-stop]')){const room=currentRoom();stopGps();privacySessions[room.id]=false;selectedPerson=null;render();notify('데모 위치 공유를 중지했어요.');return;}
+    if(event.target.closest('[data-share-start]')){
+  const room=currentRoom(),state=privacyFor(room);
+  if(state.ended)return;
+
+  if(state.consented){
+    privacySessions[room.id]=true;
+
+    if(room.remote){
+      startGps(room);
+      listenRoomLocations(room);
+    }
+
+    render();
+    notify('기존 동의를 확인하고 위치 공유를 다시 시작했어요.');
+  }else{
+    consentModal(room);
+  }
+  return;
+}
+    if(event.target.closest('[data-share-stop]')){
+  const room=currentRoom();
+  await stopGps();
+  privacySessions[room.id]=false;
+  selectedPerson=null;
+  render();
+  notify('위치 공유를 중지했어요.');
+  return;
+}
     if(event.target.closest('[data-leave-room]')){const room=currentRoom();if(room)showLeaveModal(room);return;}
     if(event.target.closest('[data-leave-cancel]')){closeLeaveModal();return;}
     if(event.target.closest('[data-leave-confirm]')){const room=currentRoom();if(room)leaveRoom(room);return;}
