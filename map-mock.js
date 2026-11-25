@@ -6,17 +6,18 @@
   let renderToken = 0;
   let participantMarkers = [];
 
-function showParticipantLocations(locations) {
-  const map = root.GachigaMap.currentMap;
+let latestLocations = [];
 
+function showParticipantLocations(locations) {
+  latestLocations = Array.isArray(locations) ? locations : [];
+
+  const map = root.GachigaMap.currentMap;
   if (!map || !root.kakao?.maps) return;
 
-  // 기존 친구 위치 마커 제거
   participantMarkers.forEach(marker => marker.setMap(null));
   participantMarkers = [];
 
-  // 새 위치 표시
-  locations.forEach(person => {
+  latestLocations.forEach(person => {
     const position = new root.kakao.maps.LatLng(
       person.latitude,
       person.longitude
@@ -33,7 +34,6 @@ function showParticipantLocations(locations) {
     participantMarkers.push(marker);
   });
 }
-
   function render(participants, room) {
     const token = ++renderToken;
 
@@ -64,6 +64,7 @@ function showParticipantLocations(locations) {
         level: 5
       });
       root.GachigaMap.currentMap = map;
+      showParticipantLocations(latestLocations);
 
       const place = String(room?.place || '').trim();
 
