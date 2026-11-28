@@ -25,7 +25,7 @@
   const simOffsets={};
   let transportMode=null;
   let editingPerson=null;
-  let rooms = loadRooms();
+  let rooms = [];
   let screen = 'home';
   let selectedId = null;
   let selectedPerson = null;
@@ -40,7 +40,7 @@
   locations: []
 };
 
-async function stopGps() {
+async function stopGps(strict = false) {
   if (liveGps.watchId !== null) {
     navigator.geolocation.clearWatch(liveGps.watchId);
     liveGps.watchId = null;
@@ -61,6 +61,10 @@ async function stopGps() {
       await F.deleteLocation(room.code);
     } catch (error) {
       console.error('위치 삭제 실패:', error);
+      if (strict === true) {
+        liveGps.roomId = room.id;
+        throw error;
+      }
     }
   }
 }
@@ -151,16 +155,36 @@ function listenRoomLocations(room) {
   function demoRoom() {
     return {id:DEMO_ID, code:'DEMO24', name:'🌷 성수에서 만나는 우리', date:'2026-11-11',time:'14:00',place:'성수역 2번 출구',demo:true};
   }
-  function loadRooms() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(KEY) || '[]');
-      return Array.isArray(saved) ? saved.filter(r=>r && typeof r.id==='string') : [];
-    } catch {return [];}
+  function accountRoomKey() {
+  return F.state.uid ? `${KEY}.${F.state.uid}` : null;
+}
+
+function loadRooms() {
+  const key = accountRoomKey();
+  if (!key) return [];
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(saved)
+      ? saved.filter(r => r && typeof r.id === 'string')
+      : [];
+  } catch {
+    return [];
   }
-  function saveRooms() {
-    try {localStorage.setItem(KEY,JSON.stringify(rooms));return true;}
-    catch {notify('저장 공간을 사용할 수 없어 현재 화면에서만 유지돼요.');return false;}
+}
+
+function saveRooms() {
+  const key = accountRoomKey();
+  if (!key) return false;
+
+  try {
+    localStorage.setItem(key, JSON.stringify(rooms));
+    return true;
+  } catch {
+    notify('약속방을 저장하지 못했어요.');
+    return false;
   }
+}
   function notify(message) {
     const el=document.querySelector('#toast');el.textContent=message;el.classList.add('show');
     clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3000);
@@ -175,6 +199,13 @@ function listenRoomLocations(room) {
   function renderHome() {
     const latest=[...rooms].reverse().slice(0,2);
     app.innerHTML=`<section class="hero"><div class="eyebrow">MEET UP, TOGETHER ♡</div><h1>우리, 얼마나<br>가까워졌을까?</h1><p>친구들과의 약속을 한곳에 모으고<br>만나는 순간까지 함께해요.</p><div class="hero-art" aria-hidden="true">🍑 🍋 🌿 💜</div><button class="button primary" data-go="create">새 약속 만들기 ＋</button></section>${joinPanel()}<section class="section-title"><h2>다가오는 우리의 약속</h2><button class="text-button" data-go="rooms">전체 보기 →</button></section>${demoLeft?'':roomCard(demoRoom())}${latest.map(roomCard).join('')}<div class="actions"><button class="button ghost full" data-go="privacy">🔒 개인정보 보호 안내</button></div>`;
+    app.insertAdjacentHTML('afterbegin', `
+      <div style="display:flex; justify-content:flex-end; padding:12px;">
+        <button id="logout-button" class="button ghost">
+          로그아웃
+        </button>
+      </div>
+    `);
   }
   function renderCreate() {
     app.innerHTML=`<div class="page-head"><div class="eyebrow">NEW MEETUP</div><h1>새로운 약속 만들기 ✨</h1><p>언제, 어디서 만날지 정해볼까요?<br>위도·경도 대신 장소 이름만 적으면 돼요.</p></div><form id="create-form" class="form-card"><div class="field"><label for="meeting-name">약속 이름</label><input id="meeting-name" name="name" maxlength="50" placeholder="예: 성수에서 만나는 토요일" required></div><div class="form-grid"><div class="field"><label for="meeting-date">날짜</label><input id="meeting-date" name="date" type="date" required></div><div class="field"><label for="meeting-time">시간</label><input id="meeting-time" name="time" type="time" required></div></div><div class="field"><label for="meeting-place">약속 장소</label><input id="meeting-place" name="place" maxlength="100" placeholder="예: 성수역 2번 출구" required><p class="hint">장소 이름을 저장해요. 지도 배경은 실제 지도이며 목적지 검색·경로 안내는 아직 연결하지 않았어요.</p></div><p id="form-error" class="error" role="alert" hidden></p><button class="button primary full" type="submit">약속방 생성하기 ✨</button></form>`;
@@ -524,7 +555,94 @@ const draft = {
   screen = 'detail';
   render();
 }
+function renderAuth(isRegister = false) {
+  app.innerHTML = `
+    <section style="padding:24px; max-width:420px; margin:auto;">
+      <div style="text-align:center; padding:30px 0;">
+        <h1 style="color:#269e85;">✳ 같이가 GATIGA</h1>
+        <p>우리의 약속, 함께 🌱</p>
+      </div>
+
+      <h2>${isRegister ? '회원가입' : '로그인'}</h2>
+
+      <form id="account-form">
+        ${isRegister ? `
+          <label>이름</label>
+          <input id="account-name" type="text"
+            maxlength="12" placeholder="이름" required>
+        ` : ''}
+
+        <label>이메일</label>
+        <input id="account-email" type="email"
+          placeholder="이메일을 입력해 주세요" required>
+
+        <label>비밀번호</label>
+        <input id="account-password" type="password"
+          minlength="6" placeholder="비밀번호 6자리 이상" required>
+
+        <p id="account-error" style="color:red;"></p>
+
+        <button class="button full" type="submit">
+          ${isRegister ? '회원가입' : '로그인'}
+        </button>
+      </form>
+
+      <button id="account-switch"
+        class="button secondary full"
+        style="margin-top:12px;">
+        ${isRegister ? '로그인으로 돌아가기' : '새 계정 만들기'}
+      </button>
+    </section>
+  `;
+
+  document.querySelector('#account-switch').onclick = () => {
+    renderAuth(!isRegister);
+  };
+
+  document.querySelector('#account-form').onsubmit = async event => {
+    event.preventDefault();
+
+    const email = document.querySelector('#account-email').value;
+    const password = document.querySelector('#account-password').value;
+    const name = document.querySelector('#account-name')?.value;
+
+    try {
+      if (isRegister) {
+        await F.register(email, password, name);
+      } else {
+        await F.login(email, password);
+      }
+
+      rooms = loadRooms();
+      selectedId = null;
+      selectedPerson = null;
+      screen = 'home';
+      render();
+
+      if (pendingInviteCode) {
+        const field = document.querySelector('#join-code');
+        if (field) field.value = pendingInviteCode;
+      }
+
+    } catch (error) {
+      document.querySelector('#account-error').textContent =
+        '인증 실패: ' + error.message;
+    }
+  };
+}
   function render() {
+    if (!F.state.ready) {
+  app.textContent = '연결 중입니다...';
+  return;
+}
+
+if (!F.state.uid) {
+  document.querySelector('.bottom-nav').style.display = 'none';
+  renderAuth();
+  return;
+}
+
+document.querySelector('.bottom-nav').style.display = '';
     if(screen==='chat'&&currentRoom()?.remote){const room=currentRoom();if(!chatUnsubscribe||chatUnsubscribe.room!==room.id){chatUnsubscribe?.();const unsub=F.listen(room.code,m=>{remoteMessages[room.id]=m;if(screen==='chat'&&selectedId===room.id){const scroll=document.querySelector('#chat-messages');renderChat(room);}},e=>notify('채팅 연결 오류: '+e.message));unsub.room=room.id;chatUnsubscribe=unsub;}}
     else if(chatUnsubscribe){chatUnsubscribe();chatUnsubscribe=null;}
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.go===(screen==='create'?'create':['rooms','detail','success','chat','sns','memory','transport'].includes(screen)?'rooms':'home')));
@@ -536,6 +654,30 @@ const draft = {
     window.scrollTo(0,0);
   }
   document.addEventListener('click',async event=>{
+      if (event.target.closest('#logout-button')) {
+        try {
+          if (chatUnsubscribe) {
+          chatUnsubscribe();
+          chatUnsubscribe = null;
+          }
+          await stopGps(true);
+          await F.logout();
+          rooms = [];
+          remoteMessages = {};
+          selectedId = null;
+          selectedPerson = null;
+
+          Object.keys(privacySessions).forEach(key => {
+            delete privacySessions[key];
+          });
+
+          screen = 'home';
+          render();
+        } catch (error) {
+          notify('로그아웃에 실패했어요.');
+        }
+        return;
+    }
     if(event.target.closest('[data-consent-decline]')){closeConsent();notify('동의하지 않아도 다른 기능은 사용할 수 있어요.');return;}
     if(event.target.closest('#consent-confirm')){
       const room=currentRoom(),checked=document.querySelector('#consent-check')?.checked;
@@ -639,7 +781,31 @@ const draft = {
     if(event.target.id==='memory-form'){event.preventDefault();saveMemory(event.target);}
   });
   window.addEventListener('pagehide',stopGps);
+  F.ready.then(async () => {
+  if (!F.state.ready) {
+    app.textContent = 'Firebase 연결에 실패했어요.';
+    return;
+  }
+  
+  if (F.state.uid) {
+    try {
+      rooms = await F.getMyRooms();
+      saveRooms();
+    } catch (error) {
+      rooms = [];
+      notify('약속방을 불러오지 못했어요.');
+      console.error(error);
+    }
+  }
   render();
-  // 공유된 URL에 초대 코드가 있다면 홈 입력란에 미리 채웁니다. 자동 입장은 하지 않습니다.
-  if(pendingInviteCode){const field=document.querySelector('#join-code');if(field){field.value=pendingInviteCode;notify('초대 코드를 입력해 두었어요. 참여하기를 눌러 확인해 주세요.');}}
+
+  if (F.state.uid && pendingInviteCode) {
+    const field = document.querySelector('#join-code');
+
+    if (field) {
+      field.value = pendingInviteCode;
+      notify('초대 코드를 입력해 두었어요.');
+    }
+  }
+});
 })();

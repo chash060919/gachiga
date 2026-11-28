@@ -8,12 +8,70 @@ const ready=(async()=>{
  try{
   const [a,b,c]=await Promise.all([import(base+'firebase-app.js'),import(base+'firebase-auth.js'),import(base+'firebase-firestore.js')]);
   const app=a.initializeApp(config);auth=b.getAuth(app);db=c.getFirestore(app);api={...b,...c};
-  const cred=await b.signInAnonymously(auth);state.uid=cred.user.uid;state.ready=true;
+ await b.setPersistence(auth, b.browserLocalPersistence);
+ await auth.authStateReady();
+ b.onAuthStateChanged(auth, user => {
+  state.uid = user && !user.isAnonymous ? user.uid : null;
+  state.user = user && !user.isAnonymous ? user : null;
+ });
+
+state.ready = true;
  }catch(e){state.error=e;console.error('Firebase 연결 실패',e);}return state;
 })();
-function requireReady(){if(!state.ready)throw Error('Firebase 연결에 실패했어요. 인터넷 연결과 Firebase 설정을 확인해 주세요.');}
+async function register(email, password, name) {
+  await ready;
+  if (!state.ready) throw Error('Firebase 연결 실패');
+
+  name = String(name || '').trim();
+  if (!name || name.length > 12) {
+    throw Error('이름은 1~12자로 입력해 주세요.');
+  }
+
+  const cred = await api.createUserWithEmailAndPassword(
+    auth, email.trim(), password
+  );
+
+  await api.updateProfile(cred.user, {
+    displayName: name
+  });
+
+  state.uid = cred.user.uid;
+  state.user = cred.user;
+  return cred.user;
+}
+
+async function login(email, password) {
+  await ready;
+  if (!state.ready) throw Error('Firebase 연결 실패');
+
+  const cred = await api.signInWithEmailAndPassword(
+    auth, email.trim(), password
+  );
+
+  state.uid = cred.user.uid;
+  state.user = cred.user;
+  return cred.user;
+}
+
+async function logout() {
+  await ready;
+  await api.signOut(auth);
+  state.uid = null;
+  state.user = null;
+}
+function requireReady() {
+  if (!state.ready) {
+    throw Error('Firebase 연결에 실패했어요.');
+  }
+
+  if (!state.uid || !auth.currentUser || auth.currentUser.isAnonymous) {
+    throw Error('먼저 로그인해 주세요.');
+  }
+}
 const ref=code=>api.doc(db,'rooms',code);
 const member=(code,uid=state.uid)=>api.doc(db,'rooms',code,'members',uid);
+const userRoom = (code, uid = state.uid) =>
+  api.doc(db, 'users', uid, 'rooms', code);
 async function create(room) {
   await ready;
   requireReady();
@@ -38,7 +96,10 @@ async function create(room) {
     joinedAt: api.serverTimestamp(),
     displayName
   });
-
+  await api.setDoc(userRoom(code), {
+    code: code,
+    displayName: displayName
+  });
   return { ...room, id: code, remote: true };
 }
 async function join(code, displayName) {
@@ -65,6 +126,11 @@ async function join(code, displayName) {
     joinedAt: api.serverTimestamp(),
     displayName: name
   });
+    
+  await api.setDoc(userRoom(code), {
+    code: code,
+    displayName: name
+  });
 
   return {
   id: code,
@@ -74,7 +140,44 @@ async function join(code, displayName) {
   remote: true
 };
 }
-async function leave(code){await ready;requireReady();await api.deleteDoc(member(code));}
+  async function leave(code) {
+    await ready;
+    requireReady();
+
+    const batch = api.writeBatch(db);
+    batch.delete(api.doc(db, 'rooms', code, 'locations', state.uid));
+    batch.delete(userRoom(code));
+    batch.delete(member(code));
+    await batch.commit();
+  }
+    async function getMyRooms() {
+    await ready;
+    requireReady();
+
+    const snapshot = await api.getDocs(
+      api.collection(db, 'users', state.uid, 'rooms')
+    );
+
+    const result = [];
+
+    for (const item of snapshot.docs) {
+      const code = item.id;
+      const roomSnap = await api.getDoc(ref(code));
+      const memberSnap = await api.getDoc(member(code));
+
+      if (roomSnap.exists() && memberSnap.exists()) {
+        result.push({
+          ...roomSnap.data(),
+          id: code,
+          code: code,
+          displayName: memberSnap.data().displayName,
+          remote: true
+        });
+      }
+    }
+
+    return result;
+  }
 async function send(code,text){await ready;requireReady();const clean=String(text).trim();if(!clean||clean.length>1000)throw Error('메시지는 1~1000자로 입력해 주세요.');
  await api.addDoc(api.collection(db,'rooms',code,'messages'),{sender:state.uid,name:'친구',text:clean,at:api.serverTimestamp()});
 }
@@ -155,6 +258,7 @@ async function deleteLocation(code){
 
 root.GachigaFirebase={
  state,ready,create,join,leave,send,listen,
- setLocation,listenLocations,deleteLocation
+ setLocation,listenLocations,deleteLocation,
+ register,login,logout,getMyRooms
 };
 })(globalThis);

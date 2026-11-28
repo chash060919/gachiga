@@ -1,42 +1,153 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function member(code) {
-      return signedIn() && exists(/databases/$(database)/documents/rooms/$(code)/members/$(request.auth.uid));
+
+    // 일반 회원 로그인 여부 확인
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
     }
+
+    // 약속방 참여 여부 확인
+    function isMember(code) {
+      return signedIn()
+        && exists(
+          /databases/$(database)/documents/rooms/$(code)/members/$(request.auth.uid)
+        );
+    }
+
+    // 초대 코드 형식 확인
+    function validCode(code) {
+      return code.matches('[A-HJ-NP-Z2-9]{12}');
+    }
+
+    // 계정별 약속방 목록
+    match /users/{uid}/rooms/{code} {
+
+      allow get, list: if signedIn()
+        && request.auth.uid == uid;
+
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && validCode(code)
+        && isMember(code)
+        && request.resource.data.keys().hasOnly([
+          'code', 'displayName'
+        ])
+        && request.resource.data.code == code
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 12;
+
+      allow delete: if signedIn()
+        && request.auth.uid == uid;
+    }
+
+    // 약속방
     match /rooms/{code} {
-      // 12자리 무작위 초대 코드를 아는 로그인 사용자만 방 정보를 직접 조회할 수 있음.
-      // Firestore 목록 조회는 금지. 초대 코드는 비밀번호가 아니므로 공개 공유에 주의.
-      allow get: if signedIn() && code.matches('[A-HJ-NP-Z2-9]{12}');
+
+      allow get: if signedIn() && validCode(code);
+
       allow list: if false;
-      allow create: if signedIn() && code.matches('[A-HJ-NP-Z2-9]{12}')
-        && request.resource.data.keys().hasOnly(['name','date','time','place','owner','createdAt'])
+
+      allow create: if signedIn()
+        && validCode(code)
+        && request.resource.data.keys().hasOnly([
+          'name', 'date', 'time', 'place',
+          'owner', 'createdAt'
+        ])
         && request.resource.data.owner == request.auth.uid
-        && request.resource.data.name is string && request.resource.data.name.size() <= 50
-        && request.resource.data.place is string && request.resource.data.place.size() <= 100
-        && request.resource.data.date is string && request.resource.data.time is string;
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 50
+        && request.resource.data.place is string
+        && request.resource.data.place.size() > 0
+        && request.resource.data.place.size() <= 100
+        && request.resource.data.date is string
+        && request.resource.data.time is string
+        && request.resource.data.createdAt == request.time;
+
       allow update, delete: if false;
+
+      // 약속방 참여자
       match /members/{uid} {
-        allow get: if signedIn() && request.auth.uid == uid;
+
+        allow get: if signedIn()
+          && request.auth.uid == uid;
+
         allow list: if false;
-        allow create: if signedIn() && request.auth.uid == uid
-          && request.resource.data.keys().hasOnly(['joinedAt'])
-          && exists(/databases/$(database)/documents/rooms/$(code));
-        allow delete: if signedIn() && request.auth.uid == uid;
-        allow update: if false;
+
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && validCode(code)
+          && request.resource.data.keys().hasOnly([
+            'joinedAt', 'displayName'
+          ])
+          && request.resource.data.joinedAt == request.time
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 12
+          && exists(
+            /databases/$(database)/documents/rooms/$(code)
+          );
+
+        allow delete: if signedIn()
+          && request.auth.uid == uid;
+
+        allow update: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly([
+            'joinedAt', 'displayName'
+          ])
+          && request.resource.data.joinedAt == request.time
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 12;
       }
+
+      // 약속방 채팅
       match /messages/{messageId} {
-        allow get, list: if member(code);
-        allow create: if member(code)
-          && request.resource.data.keys().hasOnly(['sender','name','text','at'])
+
+        allow get, list: if isMember(code);
+
+        allow create: if isMember(code)
+          && request.resource.data.keys().hasOnly([
+            'sender', 'name', 'text', 'at'
+          ])
           && request.resource.data.sender == request.auth.uid
           && request.resource.data.name == '친구'
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 1000
           && request.resource.data.at == request.time;
+
         allow update, delete: if false;
+      }
+
+      // 실시간 위치 공유
+      match /locations/{uid} {
+
+        allow get, list: if isMember(code);
+
+        allow create, update: if isMember(code)
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly([
+            'latitude', 'longitude', 'displayName', 'updatedAt'
+          ])
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() > 0
+          && request.resource.data.displayName.size() <= 12
+          && request.resource.data.latitude is number
+          && request.resource.data.latitude >= -90
+          && request.resource.data.latitude <= 90
+          && request.resource.data.longitude is number
+          && request.resource.data.longitude >= -180
+          && request.resource.data.longitude <= 180
+          && request.resource.data.updatedAt == request.time;
+
+        allow delete: if signedIn()
+          && request.auth.uid == uid;
       }
     }
   }
